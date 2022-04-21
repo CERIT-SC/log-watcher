@@ -23,9 +23,9 @@ import (
 
 func getPodLogs(cancelCtx context.Context, podName string, podInterface kv1.PodInterface, wg *sync.WaitGroup){
 	log.Printf("Now watching pod %s\n", podName) //just testing
-	file, err := os.Create(podName+".txt")
+	file, err := os.Create("/tmp/"+podName+".txt")
 	checkErr(err)
-	log.Printf("file named"+podName+".txt created!") //testing)
+	log.Printf("file named "+podName+".txt created!") //testing)
 	defer wg.Done()
 	PodLogsConnection := podInterface.GetLogs(podName, &v1.PodLogOptions{
 		Follow:    true,
@@ -91,8 +91,8 @@ func main(){
         if !err{log.Fatal("udefined")}
 		switch event.Type {
 			case watch.Added:
-				log.Printf("Pod named %s added!\n", pod.Name) //optional..more testing than normal
-				if strings.Contains(pod.Name, "agent") { //testing the name of pod
+				log.Printf("Pod named %s added!\n", pod.Name) //optional
+				if !strings.Contains(pod.Name, "watcher") { //testing the name of pod
 					wg.Add(1)
 					go getPodLogs(cancelCtx, pod.Name, podInterface, &wg)
 				}

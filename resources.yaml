@@ -17,7 +17,8 @@ spec:
       containers:
       - name: log-watcher
         image: traxiny/log-watcher:testv2
-        ports:
+        #command: ["/bin/sh"] for testing
+        #args: ["-c","sleep 2h"]
         imagePullPolicy: IfNotPresent
         resources:
           requests:
