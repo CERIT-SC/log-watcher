@@ -16,10 +16,10 @@ spec:
     spec:
       containers:
       - name: log-watcher
-        image: traxiny/log-watcher:testv2
+        image: traxiny/log-watcher:testv2.5
         command: ["./log-watcher"] #for testing
         #args: ["-c","sleep 2h"]
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         resources:
           requests:
             memory: 100Mi
@@ -29,4 +29,10 @@ spec:
             cpu: 2000m
         securityContext:
           runAsUser: 1000
+#        env:
+#        - name: POD_NAMESPACE
+#          valueFrom:
+#            fieldRef:
+#            fieldPath: metadata.namespace
       restartPolicy: Always
+        

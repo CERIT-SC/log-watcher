@@ -21,32 +21,34 @@ import (
 	//"k8s.io/apimachinery/pkg/util/duration"
 )
 
-func getPodLogs(cancelCtx context.Context, podName string, podInterface kv1.PodInterface, wg *sync.WaitGroup){
+func getPodLogs(podName string, podInterface kv1.PodInterface, wg *sync.WaitGroup, outChan chan string){ //cancelCtx context.Context, 
 	log.Printf("Now watching pod %s\n", podName) //just testing
+	defer wg.Done()
+	defer log.Printf("Finished watching pod %s\n", podName) //testing
+	//creating file to write to
 	file, err := os.Create("/tmp/"+podName+".txt")
 	checkErr(err)
-	log.Printf("file named "+podName+".txt created!") //testing)
-	defer wg.Done()
+	defer file.Close()
+	log.Printf("file named "+podName+".txt created!") //testing
 	PodLogsConnection := podInterface.GetLogs(podName, &v1.PodLogOptions{
 		Follow:    true,
 		TailLines: &[]int64{int64(10)}[0],
 	})
 	LogStream, _ := PodLogsConnection.Stream(context.Background())
 	defer LogStream.Close()
-	defer log.Printf("Finished watching pod %s\n", podName) //testing
-	defer file.Close()
 	reader := bufio.NewScanner(LogStream)
-	var line string
+	var exitString, line string
 	for {
 		for reader.Scan() {
 			select {
-			case <-cancelCtx.Done():
-				break
+			case exitString = <- outChan: 
+				if (exitString == podName){ 
+					return
+				}
 			default:
-				line = reader.Text()
 				_, err = file.WriteString(line)
 				checkErr(err)
-				//log.Printf("Pod: %s line: %v\n", podName, line)
+				log.Printf("Pod: %s line: %v\n", podName, line)
 			}
 		}
 	}
@@ -66,7 +68,8 @@ func main(){
 	clientset, err := kubernetes.NewForConfig(config)
 	checkErr(err)
 
-	ns:= "jesko-ns" //rewerite so it gets the namespace where it is..for test purpose leave it as it is
+	ns:= "jesko-ns" //rewrite so it gets the namespace where it is..for test purpose leave it as it is
+	//not really necessary?
 	var label, field string
 	flag.StringVar(&label, "l", "", "Label selector")
 	flag.StringVar(&field, "f", "", "Field selector")
@@ -74,32 +77,35 @@ func main(){
 		LabelSelector: label,
 		FieldSelector: field,
 	}
+	//not really necessary?
 
 	api := clientset.CoreV1()
 	podInterface := api.Pods(ns)
 	//cpodList, err := podInterface.List(context.Background(), listOptions)
 	checkErr(err)
 	ctx := context.Background()
-	cancelCtx, endGofuncs := context.WithCancel(ctx)
+	//cancelCtx, endGofuncs := context.WithCancel(ctx) //bring this back only if you need to kill all goroutines or if all go routines need to talk to each other with common shit
 	watcher, err := podInterface.Watch(ctx, listOptions)
     checkErr(err)
     ch := watcher.ResultChan()
 	var wg sync.WaitGroup
+	outChan := make(chan string)
 
 	for event := range ch {
         pod, err := event.Object.(*v1.Pod)
         if !err{log.Fatal("udefined")}
 		switch event.Type {
 			case watch.Added:
-				log.Printf("Pod named %s added!\n", pod.Name) //optional
 				if !strings.Contains(pod.Name, "watcher") { //testing the name of pod
+					log.Printf("Pod named %s added!\n", pod.Name) //optional
 					wg.Add(1)
-					go getPodLogs(cancelCtx, pod.Name, podInterface, &wg)
+					go getPodLogs(pod.Name, podInterface, &wg, outChan)
 				}
 			case watch.Deleted:
-				log.Printf("Pod named %s deleted!\n", pod.Name) //optional..more testing than normal
+				outChan <- pod.Name
+				log.Printf("Pod named %s deleted!\n", pod.Name) //optional
 		}
 	}
 	wg.Wait()
-	endGofuncs() 	
+	//endGofuncs() 	
 }
