@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: log-watcher
-        image: traxiny/log-watcher:testv3.2
+        image: traxiny/log-watcher:testv3.4
         command: ["./log-watcher"] #for testing
         #args: ["-c","sleep 2h"]
         imagePullPolicy: Always
@@ -31,6 +31,6 @@ spec:
           runAsUser: 1000
         env:
         - name: FILTER
-          value: "hello-*"
+          value: "hello-*" #this can be changed to something like $FILTER_NAME #(when using resources to deploy it would be defined)
       restartPolicy: Always
         

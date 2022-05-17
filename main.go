@@ -1,7 +1,7 @@
 /*========================
 		Log-watcher
 	author: Patrik Jesko
-	last update: 12/05/22
+	last update: 17/05/22
 ==========================*/
 
 package main
@@ -14,9 +14,7 @@ import (
 	"bufio"
 	"os"
 	"regexp"
-	//"strings"
-	//"errors"
-	"sync"
+	//"sync"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/apimachinery/pkg/watch"
@@ -26,12 +24,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 //Getting pod logs
-func getPodLogs(pod *v1.Pod, podInterface kv1.PodInterface, cancelCtx context.Context, wg *sync.WaitGroup){
+func getPodLogs(pod *v1.Pod, podInterface kv1.PodInterface, cancelCtx context.Context){//, wg *sync.WaitGroup){
 
 	fmt.Printf("Now watching pod %s\n", pod.Name) //just testing
-	defer wg.Done()
+	//defer wg.Done()
 
-	//creating file to write to
 	file, err := os.Create("/tmp/"+pod.Name+".txt")
 	checkErr(err)
 	defer file.Close()
@@ -47,21 +44,24 @@ func getPodLogs(pod *v1.Pod, podInterface kv1.PodInterface, cancelCtx context.Co
 	scanner := bufio.NewScanner(LogStream)
 	var line string
 	
-	for {
+	for {//this needs a lot of improvement...maybe make a testing ground..almsot the same but doesnt have to run in cluster
 		for scanner.Scan() { //returns bool so if Scan is false (when scan stops)
 			select {
 			case <-cancelCtx.Done(): //dont know what to do here :/
+				fmt.Printf("What am I doing here?!\n")
 				break //I had return here maybe that was the problem (dont know when the context starts or whatever)
 			default:
 				line = scanner.Text()
 				_, err = file.WriteString(line)
 				checkErr(err)
-				//fmt.Printf("Pod: %s line: %v\n", podName, line)
 			}
-		//!!!
-		if scanner.Err() != nil { //if pod doesnt exist end this goroutine
-			fmt.Printf("%s\n",scanner.Err())
 		}
+		//!!!!!!!
+		pod.Status
+		fmt.Printf("Out of Scan!\n") //toto bolo loopnute
+		if scanner.Err() != nil { //TODO : if pod doesnt exist end this goroutine
+			fmt.Printf("%s\n",scanner.Err())
+			//return probably
 		}
 	}
 }
@@ -112,7 +112,7 @@ func main(){
 	watcher, err := podInterface.Watch(ctx, metav1.ListOptions{})
     checkErr(err)
     ch := watcher.ResultChan()
-	var wg sync.WaitGroup
+	//var wg sync.WaitGroup
 
 	r, _ := regexp.Compile(os.Getenv("FILTER"))
 
@@ -124,13 +124,13 @@ func main(){
 				if r.MatchString(pod.Name) {
 					fmt.Printf("Pod named %s added!\n", pod.Name) //optional
 					wait.PollImmediateInfinite(time.Second, isPodRunning(podInterface, pod.Name, ctx))
-					wg.Add(1)
-					go getPodLogs(pod, podInterface, cancelCtx, &wg)
+					//wg.Add(1)
+					go getPodLogs(pod, podInterface, cancelCtx )//, &wg)
 				}
 			case watch.Deleted:
 				fmt.Printf("Pod named %s deleted!\n", pod.Name) //optional
 		}
 	}
-	wg.Wait()
+	//wg.Wait()
 	endGofuncs() 	
 }
