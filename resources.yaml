@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: log-watcher
-        image: traxiny/log-watcher:testv3.4
+        image: traxiny/log-watcher:testv2.5
         command: ["./log-watcher"] #for testing
         #args: ["-c","sleep 2h"]
         imagePullPolicy: Always
