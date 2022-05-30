@@ -1,7 +1,7 @@
 /*========================
 		Log-watcher
 	author: Patrik Jesko
-	last update: 26/05/22
+	last update: 27/05/22
 ==========================*/
 
 package main
@@ -93,15 +93,15 @@ func getPodLogs(pod *v1.Pod, podInterface kv1.PodInterface, ctx context.Context,
 			line = scanner.Text()
 			//_, err = file.WriteString(line)
 			fmt.Printf(line)
-			checkErr(err)
+			//checkErr(err)
 		}
-		//time.Sleep(100*time.Millisecond)
-		//wait.PollImmediateInfinite(time.Second, isPodRunning(podInterface, pod.Name, ctx))
 		if GetPodStatus(podInterface, pod.Name, ctx) { 
 			//true if deleted or finished(job)
 			return
 		}
-
+		time.Sleep(500*time.Millisecond)//if pod restarts give it some time (better with condition)
+		LogStream, err = PodLogsConnection.Stream(context.Background())
+		scanner = bufio.NewScanner(LogStream)
 	}
 }
 
@@ -129,17 +129,16 @@ func main(){
 	podInterface := api.Pods(string(ns))
 	checkErr(err)
 	ctx := context.Background()
-	//cancelCtx, endGofuncs := context.WithCancel(ctx) //bring this back only if you need to kill all goroutines or if all go routines need to talk to each other with common shit
 	watcher, err := podInterface.Watch(ctx, metav1.ListOptions{})
     checkErr(err)
     ch := watcher.ResultChan()
 	var wg sync.WaitGroup
 
 	//r, _ := regexp.Compile(os.Getenv("FILTER"))
-
+	wg.Add(1)//add one waitgroup that will never ends ("infinity loop")
 	for event := range ch {
         pod, err := event.Object.(*v1.Pod)
-        if !err{log.Fatal("udefined")} //fatal is risky..
+        if !err{log.Fatal("udefined")} //fatal is risky..but it never should happen
 		switch event.Type {
 			case watch.Added:
 				if strings.Contains(pod.Name, "hello") {//r.MatchString(pod.Name) {
