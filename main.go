@@ -1,8 +1,16 @@
 /*========================
 		Log-watcher
 	author: Patrik Jesko
-	last update: 27/05/22
+	last update: 30/05/22
 ==========================*/
+
+/*
+Need fixing:
+pod not writing ouput longer than 30s -> err //problem on kubernetes side I think
+when container restarts (depends how much it takes to restart) -> reading the old log till the new conainer isnt ready
+not tested with lots of pods
+*/
+
 
 package main
 
@@ -68,9 +76,19 @@ func GetPodStatus(podInterface kv1.PodInterface , podName string, ctx context.Co
 	return false
 }
 
+func waitRestarted(pod *v1.Pod, restartCount *int32){
+	for {
+		if pod.Status.ContainerStatuses[0].RestartCount > *restartCount {
+			*restartCount = pod.Status.ContainerStatuses[0].RestartCount
+			log.Println(*restartCount)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 //Getting pod logs
 func getPodLogs(pod *v1.Pod, podInterface kv1.PodInterface, ctx context.Context, wg *sync.WaitGroup){
-
 	fmt.Printf("Now watching pod %s\n", pod.Name) //just testing
 	defer wg.Done()
 
@@ -87,20 +105,34 @@ func getPodLogs(pod *v1.Pod, podInterface kv1.PodInterface, ctx context.Context,
 	defer fmt.Printf("Stoped watching %s\n", pod.Name) //very important to see //testing
 	scanner := bufio.NewScanner(LogStream)
 	var line string	
+	var restartCount int32 = pod.Status.ContainerStatuses[0].RestartCount
 
 	for {//this needs a lot of improvement
 		for scanner.Scan() { //returns bool so if Scan is false (when scan stops)
 			line = scanner.Text()
+			if strings.Contains(line, "unable to retrieve container logs for containerd:") || strings.Contains(line, "an error occurred when try to find container") { 
+				//true if .Text() returns token with errors in condition
+				return
+			} //temporary solution but gets the job done
 			//_, err = file.WriteString(line)
 			fmt.Printf(line)
 			//checkErr(err)
 		}
-		if GetPodStatus(podInterface, pod.Name, ctx) { 
-			//true if deleted or finished(job)
+		//out of scan
+		if GetPodStatus(podInterface, pod.Name, ctx) || scanner.Err() != nil{ 
+			//true if deleted or finished(job) || scaner has error
 			return
 		}
-		time.Sleep(500*time.Millisecond)//if pod restarts give it some time (better with condition)
-		LogStream, err = PodLogsConnection.Stream(context.Background())
+		if restartCount != pod.Status.ContainerStatuses[0].RestartCount {
+			//wait a while till the container fully restarts (still not enough time)
+			waitRestarted(pod, &restartCount)
+			time.Sleep(1 * time.Second)
+		}
+		//reset connection if container restarts
+		PodLogsConnection := podInterface.GetLogs(pod.Name, &v1.PodLogOptions{
+			Follow:    true,
+		})
+		LogStream, err = PodLogsConnection.Stream(ctx)
 		scanner = bufio.NewScanner(LogStream)
 	}
 }
@@ -131,30 +163,29 @@ func main(){
 	ctx := context.Background()
 	watcher, err := podInterface.Watch(ctx, metav1.ListOptions{})
     checkErr(err)
-    ch := watcher.ResultChan()
+    //ch := watcher.ResultChan()
 	var wg sync.WaitGroup
 
-	r, _ := regexp.Compile(os.Getenv("FILTER"))
+	//r, _ := regexp.Compile(os.Getenv("FILTER"))
 
 	for {
         select {
         case event := <-watcher.ResultChan():
-        pod, err := event.Object.(*v1.Pod)
-        if !err{log.Fatal("udefined")} //fatal is risky..
-		
-		switch event.Type {
-			case watch.Added:
-				if strings.Contains(pod.Name, "hello") {//r.MatchString(pod.Name) {
-					fmt.Printf("Pod named %s added!\n", pod.Name) //optional
-					wait.PollImmediateInfinite(time.Second, isPodRunning(podInterface, pod.Name, ctx))
-					wg.Add(1)
-					go getPodLogs(pod, podInterface, ctx, &wg)
+        	pod, err := event.Object.(*v1.Pod)
+        	if !err{log.Fatal("undefined")} //fatal is risky..
+			switch event.Type {
+				case watch.Added:
+					if strings.Contains(pod.Name, "hello") {//r.MatchString(pod.Name) {
+						fmt.Printf("Pod named %s added!\n", pod.Name) //optional
+						wait.PollImmediateInfinite(time.Second, isPodRunning(podInterface, pod.Name, ctx))
+						wg.Add(1)
+						go getPodLogs(pod, podInterface, ctx, &wg)
+					}
+				case watch.Deleted:
+					fmt.Printf("Pod named %s deleted!\n", pod.Name) //optional
 				}
-			case watch.Deleted:
-				fmt.Printf("Pod named %s deleted!\n", pod.Name) //optional
-			}
 		}
-		time.Sleep(1 * time.Milliseconds)
+		//time.Sleep(1 * time.Milliseconds)
 	}
 	wg.Wait()
 }
