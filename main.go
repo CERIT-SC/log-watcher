@@ -78,34 +78,23 @@ func getPodLogs(pod *v1.Pod, podInterface kv1.PodInterface, ctx context.Context,
 	PodLogsConnection := podInterface.GetLogs(pod.Name, &v1.PodLogOptions{
 		Follow:    true,
 	})
-	LogStream, err := PodLogsConnection.Stream(context.Background())
+	LogStream, err := PodLogsConnection.Stream(ctx)
 	checkErr(err)
 	defer LogStream.Close()
-	defer fmt.Printf("Stoped watching %s\n", pod.Name) //very important to see
+	defer fmt.Printf("Stoped watching %s\n", pod.Name) //very important to see //testing
 	scanner := bufio.NewScanner(LogStream)
 	var line string	
 
-	for {//this needs a lot of improvement...maybe make a testing ground..almsot the same but doesnt have to run in cluster
+	for {//maye add the logStream in here
 		for scanner.Scan() { //returns bool so if Scan is false (when scan stops)
-			/*select {
-			case <-cancelCtx.Done(): //dont know what to do here :/
-				fmt.Printf("What am I doing here?!\n")
-				break //I had return here maybe that was the problem (dont know when the context starts or whatever)
-			default:*/
 			line = scanner.Text()
 			_, err = file.WriteString(line)
 			checkErr(err)
-			//}
 		}
-		if GetPodStatus(podInterface, pod.Name, ctx) { //if false then I know there was an error or the pod succeeded/failed
+
+		if !GetPodStatus(podInterface, pod.Name, ctx) { //if false then I know there was an error or the pod succeeded/failed
 			return
 		}
-		/*
-		fmt.Printf("Out of Scan!\n") //toto bolo loopnute
-		if scanner.Err() != nil { //TODO : if pod doesnt exist end this goroutine
-			fmt.Printf("%s\n",scanner.Err())
-			//return probably
-		}*/
 	}
 }
 
@@ -132,9 +121,12 @@ func main(){
 
 	r, _ := regexp.Compile(os.Getenv("FILTER"))
 
-	for event := range ch {
+	for {
+        select {
+        case event := <-watcher.ResultChan():
         pod, err := event.Object.(*v1.Pod)
         if !err{log.Fatal("udefined")} //fatal is risky..
+		
 		switch event.Type {
 			case watch.Added:
 				if r.MatchString(pod.Name) {
@@ -145,7 +137,9 @@ func main(){
 				}
 			case watch.Deleted:
 				fmt.Printf("Pod named %s deleted!\n", pod.Name) //optional
+			}
 		}
+		time.Sleep(1 * time.Milliseconds)
 	}
 	wg.Wait()
 }
