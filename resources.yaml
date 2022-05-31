@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: watcher-test
+  name: log-watcher-test
   labels:
     app: log-watcher
 spec:
@@ -14,12 +14,17 @@ spec:
       labels:
         app: log-watcher
     spec:
+      volumes:
+      - name: shared-logs
+        emptyDir: {}
       containers:
       - name: log-watcher
-        image: traxiny/log-watcher:testv3.6
-        command: ["./log-watcher"] #for testing
-        #args: ["-c","sleep 2h"]
+        image: traxiny/log-watcher:V1
         imagePullPolicy: Always
+        command: ["./log-watcher-starter"] 
+        volumeMounts:
+        - name: shared-logs
+          mountPath: /tmp
         resources:
           requests:
             memory: 100Mi
@@ -30,7 +35,23 @@ spec:
         securityContext:
           runAsUser: 1000
         env:
-        - name: FILTER
-          value: "hello-*" #this can be changed to something like $FILTER_NAME #(when using resources to deploy it would be defined)
-      restartPolicy: Always
-        
+        - name: NAME_FILTER
+          value: "hello-*"
+      - name: file-beat
+        image: docker.elastic.co/beats/filebeat:8.2.2
+        imagePullPolicy: IfNotPresent
+        command: [] #filebeat setup command
+        volumeMounts:
+        - name: shared-logs
+          mountPath: /tmp #where the files will be
+        resources:
+          requests:
+            memory: 100Mi
+            cpu: 1000m
+          limits:
+            memory: 500Mi
+            cpu: 2000m
+        securityContext:
+          runAsUser: 1000
+        env:
+        #the config file
