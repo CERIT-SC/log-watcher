@@ -1,3 +1,10 @@
-# log-watcher
+## log-watcher
 
-This is repository for log-watcher. Watching any new pods and keeping logs of all pods.
+Log-watcher is application
+
+
+# Deployment
+
+Simply download the `reasources.yaml` file, change it to fit your needs and use `kubectl apply`
+
+# Changes to `resources.yaml`
