@@ -38,3 +38,8 @@ env:
     - name: NAME_FILTER
       value: "hello-*"
 ```
+
+## Things to look out for (V1)
+
+When pod is not printing any logs for more than 30s the connection breaks. -- Fixed by making the watcher automatically run again.
+When the container in pod restarts log watcher is not waiting long enough. 
