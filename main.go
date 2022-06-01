@@ -9,6 +9,7 @@ Need fixing:
 pod not writing ouput longer than 30s -> err //problem on kubernetes side I think
 when container restarts (depends how much it takes to restart) -> reading the old log till the new conainer isnt ready
 not tested with lots of pods
+change the restart count (makes deployment little bit messy)
 */
 
 
